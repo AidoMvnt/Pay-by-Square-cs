@@ -33,7 +33,66 @@ namespace QRBar
                     }
                     return 0;
                 }
-                if (args[i] == "--ecl" && i + 1 < args.Length)
+                if (args[i] == "--pbs")
+                {
+                    // Pay by Square (Slovak) payment QR: build the base32hex string.
+                    // Usage: --pbs --iban SK... --amount 12.34 --vs 12345
+                    //                [--cs ...] [--ss ...] [--payee "Meno"]
+                    //                [--date 20261215] [--note ...] [--bic BICXXX]
+                    //                [--qr] [--out FOO.bmp]
+                    string iban = "", amount = "", vs = "", cs = "", ss = "",
+                           payee = "", date = "", note = "", bic = "";
+                    bool makeQr = false;
+                    for (int j = i + 1; j < args.Length; j++)
+                    {
+                        string a = args[j];
+                        if      (a == "--iban"  && j + 1 < args.Length) iban  = args[++j];
+                        else if (a == "--amount"&& j + 1 < args.Length) amount= args[++j];
+                        else if (a == "--vs"    && j + 1 < args.Length) vs    = args[++j];
+                        else if (a == "--cs"    && j + 1 < args.Length) cs    = args[++j];
+                        else if (a == "--ss"    && j + 1 < args.Length) ss    = args[++j];
+                        else if (a == "--payee" && j + 1 < args.Length) payee = args[++j];
+                        else if (a == "--date"  && j + 1 < args.Length) date  = args[++j];
+                        else if (a == "--note"  && j + 1 < args.Length) note  = args[++j];
+                        else if (a == "--bic"   && j + 1 < args.Length) bic   = args[++j];
+                        else if (a == "--qr") makeQr = true;
+                    }
+                    if (iban == "")   throw new ArgumentException("--pbs requires --iban");
+                    if (amount == "") throw new ArgumentException("--pbs requires --amount");
+
+                    var account = new BankAccount
+                    {
+                        Iban = iban,
+                        Bic  = bic == "" ? null : bic,
+                    };
+                    var payment = new Payment
+                    {
+                        Amount           = amount,
+                        VariableSymbol   = vs,
+                        ConstantSymbol   = cs,
+                        SpecificSymbol   = ss,
+                        PayeeName        = payee,
+                        DueDate          = date,
+                        PaymentNote      = note,
+                    };
+                    payment.BankAccounts.Add(account);
+                    string pbs = PayBySquare.Encode(payment);
+                    Console.WriteLine("pbstring: " + pbs);
+                    Console.WriteLine("length:   " + pbs.Length + " chars");
+                    if (makeQr)
+                    {
+                        QrCode q = QrCode.EncodeText(pbs, QrCode.Ecc.Medium);
+                        bool[,] mod = new bool[q.Size, q.Size];
+                        for (int y = 0; y < q.Size; y++)
+                            for (int x = 0; x < q.Size; x++)
+                                mod[y, x] = q.GetModule(x, y);
+                        string outAbs = Path.GetFullPath(outPath);
+                        BmpSaver.Save(mod, outAbs);
+                        Console.WriteLine($"qr:       v{q.Version} {q.Size}x{q.Size} mask {q.Mask} -> {outAbs}");
+                    }
+                    return 0;
+                }
+                            if (args[i] == "--ecl" && i + 1 < args.Length)
                 {
                     if (!Enum.TryParse<QrCode.Ecc>(args[i + 1], true, out ecl))
                         throw new ArgumentException("Invalid --ecl value");
@@ -156,6 +215,52 @@ namespace QRBar
             bool expectedDark = (20 + 0) % 2 == 0;
             Check((raw[dataStart] & 0x80) != 0 == expectedDark, "bit order: leftmost pixel in MSB, bottom-up row order");
             System.IO.File.Delete(tmp);
+
+            // ---- Pay by Square golden vector (from bysquare.sk official test suite) ----
+            // IBAN SK6807200002891987426353 (bank 0720 -> BIC NBSBSKBX), due 2019-12-01,
+            // VS=100, CS=200, SS=300, payee "No one", amount 1.
+            var goldPay = new Payment
+            {
+                Amount         = "1",
+                DueDate        = "20191201",
+                VariableSymbol = "100",
+                ConstantSymbol = "200",
+                SpecificSymbol = "300",
+                PayeeName      = "No one",
+            };
+            goldPay.BankAccounts.Add(new BankAccount { Iban = "SK6807200002891987426353" });
+            const string goldExpected =
+                "0005C000A2Q0DJ3G9BRS6QPDH5ULN7B0P2AVGBL62AVG88CDE4MG3UNGQFUHGD4SU6VMJ9K6R55NE4DFT7O7V34VRBK0O2ACSV3ITLKU6GT41BNTAOQC26HR0IAQF9EPMDFVVEPRO000";
+            try
+            {
+                string goldGot = PayBySquare.Encode(goldPay);
+                Check(goldGot == goldExpected, "Pay by Square official golden vector (byte-identical)");
+                Check(goldGot.Length >= 100 &&
+                      goldGot.All(c => System.Char.IsUpper(c) || (c >= '0' && c <= '9')),
+                      "Pay by Square output is base32hex charset");
+            }
+            catch (Exception ex)
+            {
+                Check(false, "Pay by Square encode runs: " + ex.Message);
+            }
+
+            // BIC lookup
+            Check(PayBySquare.LookUpBicPublic("SK6807200002891987426353") == "NBSBSKBX",
+                  "BIC lookup: bank code 0720 -> NBSBSKBX");
+            Check(PayBySquare.LookUpBicPublic("sk3302 0000000000012351") == "SUBASKBX",
+                  "BIC lookup: bank code 0200 -> SUBASKBX (case/space tolerant)");
+            Check(PayBySquare.LookUpBicPublic("CZ7061000000001030900063") == null,
+                  "BIC lookup: non-SK IBAN returns null");
+
+            // deterministic output
+            string p1, p2;
+            try
+            {
+                p1 = PayBySquare.Encode(goldPay);
+                p2 = PayBySquare.Encode(goldPay);
+            }
+            catch { p1 = p2 = null; }
+            Check(p1 != null && p1 == p2, "Pay by Square deterministic for identical input");
 
             Console.WriteLine($"\n== {_passed} passed, {_failed} failed ==");
             return _failed == 0 ? 0 : 1;
