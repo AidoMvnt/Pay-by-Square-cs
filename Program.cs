@@ -10,6 +10,24 @@ namespace QRBar
             if (args.Length == 1 && args[0] == "--test")
                 return QRCodeTests.Run();
 
+            try
+            {
+                return RunCli(args);
+            }
+            catch (ArgumentException e)
+            {
+                Console.Error.WriteLine("error: " + e.Message);
+                return 2;
+            }
+            catch (System.IO.IOException e)
+            {
+                Console.Error.WriteLine("io error: " + e.Message);
+                return 3;
+            }
+        }
+
+        private static int RunCli(string[] args)
+        {
             string text = "ahoj";
             string outPath = "qr_ahoj.bmp";
             QrCode.Ecc ecl = QrCode.Ecc.Medium;
@@ -188,6 +206,25 @@ namespace QRBar
             else      { _failed++; Console.WriteLine($"[FAIL] {name}"); }
         }
 
+        private static void CheckThrows<T>(string name, Action act) where T : Exception
+        {
+            try { act(); Check(false, name + "  (no exception thrown)"); }
+            catch (T)      { Check(true,  name); }
+            catch (Exception e) { Check(false, name + $"  (got {e.GetType().Name} instead of {typeof(T).Name})"); }
+        }
+
+        private static void CheckSymbolOk(Payment p, string name)
+        {
+            // Assigning the symbol on a fresh object; if it doesn't throw, pass.
+            var fresh = new Payment
+            {
+                VariableSymbol   = p.VariableSymbol,
+                ConstantSymbol   = p.ConstantSymbol,
+                SpecificSymbol   = p.SpecificSymbol,
+            };
+            Check(true, name);
+        }
+
         public static int Run()
         {
             Console.WriteLine("== QRBar unit tests ==");
@@ -306,6 +343,16 @@ namespace QRBar
             {
                 Check(false, "Pay by Square round-trip: " + ex.Message);
             }
+
+            // ---- Symbol validation: VS/CS/SS must be digits-only (or empty) ----
+            CheckThrows<ArgumentException>("VS with dash rejected", () => { var p = new Payment(); p.VariableSymbol = "2026-09-01"; });
+            CheckThrows<ArgumentException>("CS with letters rejected", () => { var p = new Payment(); p.ConstantSymbol = "ABC12"; });
+            CheckThrows<ArgumentException>("SS with dot rejected",  () => { var p = new Payment(); p.SpecificSymbol = "12.34"; });
+            CheckThrows<ArgumentException>("VS >28 digits rejected", () => { var p = new Payment(); p.VariableSymbol = new string('1', 29); });
+            // Valid values accepted (digits, and exactly at the limit)
+            CheckSymbolOk(new Payment { VariableSymbol = "0000000000000000000000000000" }, "VS: 28 digits accepted");
+            CheckSymbolOk(new Payment { VariableSymbol = "" },                            "VS: empty allowed");
+            CheckSymbolOk(new Payment { VariableSymbol = "12345" },                       "VS: plain digits accepted");
 
             // BIC lookup
             Check(PayBySquare.LookUpBicPublic("SK6807200002891987426353") == "NBSBSKBX",

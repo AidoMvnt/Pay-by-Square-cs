@@ -18,9 +18,41 @@ namespace QRBar
         public string Amount         { get; set; } = "0.00";
         public string Currency       { get; set; } = "EUR";
         public string DueDate        { get; set; } = "";   // YYYYMMDD
-        public string VariableSymbol { get; set; } = "";
-        public string ConstantSymbol { get; set; } = "";
-        public string SpecificSymbol { get; set; } = "";
+
+        /// <summary>Variable symbol — digits only (or empty), max 28 chars.</summary>
+        public string VariableSymbol
+        {
+            get => _variableSymbol;
+            set => _variableSymbol = CheckSymbol(value, "VariableSymbol", 28);
+        }
+        private string _variableSymbol = "";
+
+        /// <summary>Constant symbol — digits only (or empty), max 5 chars.</summary>
+        public string ConstantSymbol
+        {
+            get => _constantSymbol;
+            set => _constantSymbol = CheckSymbol(value, "ConstantSymbol", 5);
+        }
+        private string _constantSymbol = "";
+
+        /// <summary>Specific symbol — digits only (or empty), max 10 chars.</summary>
+        public string SpecificSymbol
+        {
+            get => _specificSymbol;
+            set => _specificSymbol = CheckSymbol(value, "SpecificSymbol", 10);
+        }
+        private string _specificSymbol = "";
+
+        private static string CheckSymbol(string? value, string name, int maxLen)
+        {
+            string v = value?.Trim() ?? "";
+            if (v.Length > 0 && v.Any(c => c < '0' || c > '9'))
+                throw new ArgumentException($"{name} must contain digits only (got \"{value}\").");
+            if (v.Length > maxLen)
+                throw new ArgumentException($"{name} exceeds {maxLen} digits (got {v.Length}).");
+            return v;
+        }
+
         public string PaymentNote    { get; set; } = "";
         public string PayeeName      { get; set; } = "";
         public string PayeeStreet    { get; set; } = "";

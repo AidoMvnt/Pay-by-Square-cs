@@ -1,14 +1,20 @@
-Pay by Square test payment (scannable):
-
-iban:  SK6807200002891987426353
-bic:   NBSBSKBX (auto-looked-up, bank 0720)
+Pay by Square test payment (scannable)
+=======================================
+iban:   SK6807200002891987426353
+bic:    NBSBSKBX (auto-looked-up, bank 0720 Tatra banka)
 amount: 42.50 EUR
-vs:    20260901-14
-due:   2026-09-30
-payee: Mainvent s.r.o.
-note:  Faktura 14/26
+vs:     2026090114
+cs:     12345
+due:    2026-09-30
+payee:  Mainvent s.r.o.
+note:   Faktura 14/26
 
 QRBar string:
-000740001EUDGF9UC3EPKD9JBANCQP9BJ887UK2QQGABJ0HU49VRHU6KRK6KU2OE64NHRREAA48QMFSIMC3A95MT1VTC3Q90VJDRA0H63PS2076VJFJBPJPCAJB6RF1FS6PHCL3MKRUOCNSS7MO65C5ET2KS5O61GN6BBTQHH2AFFDNTKIGS0
+0007C0001CQ3LNA3931371KTN1LCN4B00KHAG7RS45NJE8JFPBGEGF3BQFPRFJS2BT838M370U9STO18QEHPCF6SA6LL4R6T24J2LL637HJAI216LQ7H9P950K0P4VOV1T8I12LDVI720TFRKE9OCGVDFJI727RGHK4C1BM2BBLECKK3BVVUAAT000
 
 Verified: official bysquare bank decoder round-trip OK.
+
+Generate:
+  dotnet run -- --pbs --iban SK6807200002891987426353 --amount 42.50 \
+              --vs 2026090114 --cs 12345 --payee "Mainvent s.r.o." \
+              --date 20260930 --note "Faktura 14/26" --qr
