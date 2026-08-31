@@ -4,3 +4,6 @@ obj/
 *.png
 nayuki_ref/
 .DS_Store
+# test artifacts (committed for the docs)
+!samples/
+!samples/**
