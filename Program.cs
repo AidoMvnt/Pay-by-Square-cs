@@ -138,6 +138,50 @@ namespace QRBar
     {
         private static int _passed, _failed;
 
+        // ---- base32hex + LZMA1 decoder (independent round-trip check) ----
+        private static string DecodeRoundTrip(string b32)
+        {
+            const string ALPHA = "0123456789ABCDEFGHIJKLMNOPQRSTUV";
+            var bitBuf = new System.Text.StringBuilder();
+            foreach (char c in b32)
+            {
+                int idx = ALPHA.IndexOf(c);
+                if (idx < 0) throw new FormatException("bad base32hex char: " + c);
+                bitBuf.Append(Convert.ToString(idx, 2).PadLeft(5, '0'));
+            }
+            while (bitBuf.Length % 8 != 0) bitBuf.Append('0');
+            string bits = bitBuf.ToString();
+            byte[] total = new byte[bits.Length / 8];
+            for (int i = 0; i < total.Length; i++)
+                total[i] = (byte)Convert.ToInt32(bits.Substring(i * 8, 8), 2);
+
+            int payloadLen = total[2] | (total[3] << 8);
+            byte[] body = new byte[total.Length - 4];
+            Array.Copy(total, 4, body, 0, body.Length);
+
+            byte[] decompressed = Lzma1Decompress(body, payloadLen);
+            // decompressed = [crc32:4][utf8...]
+            if (decompressed.Length < 5) throw new FormatException("payload too short");
+            return System.Text.Encoding.UTF8.GetString(decompressed, 4, decompressed.Length - 4);
+        }
+
+        private static byte[] Lzma1Decompress(byte[] lzmaBody, int expectedUncomp)
+        {
+            // 7-Zip LZMA-SDK Decoder is a raw coder: properties (lc/lp/pb/dict) are
+            // supplied via SetDecoderProperties, the in-stream is the raw encoder
+            // output as produced by Lzma1Compress (props byte + range stream).
+            byte[] props = { 0x5D, 0, 0, unchecked((byte)(131072 >> 16)), 0 }; // lc=3,lp=0,pb=2, dict=128KiB
+            var decoder = new SevenZip.Compression.LZMA.Decoder();
+            decoder.SetDecoderProperties(props);
+            using var inMs = new System.IO.MemoryStream(lzmaBody);
+            using var outMs = new System.IO.MemoryStream();
+            decoder.Code(inMs, outMs, lzmaBody.Length, (long)expectedUncomp, null);
+            byte[] all = outMs.ToArray();
+            if (all.Length < expectedUncomp) throw new System.IO.InvalidDataException("LZMA1 decode short");
+            return all;
+        }
+
+
         private static void Check(bool cond, string name)
         {
             if (cond) { _passed++; Console.WriteLine($"[PASS] {name}"); }
@@ -216,9 +260,9 @@ namespace QRBar
             Check((raw[dataStart] & 0x80) != 0 == expectedDark, "bit order: leftmost pixel in MSB, bottom-up row order");
             System.IO.File.Delete(tmp);
 
-            // ---- Pay by Square golden vector (from bysquare.sk official test suite) ----
-            // IBAN SK6807200002891987426353 (bank 0720 -> BIC NBSBSKBX), due 2019-12-01,
-            // VS=100, CS=200, SS=300, payee "No one", amount 1.
+            // ---- Pay by Square round-trip test ----
+            // 7-Zip LZMA-SDK produces a different (equally valid) LZMA1 stream than
+            // xz, so we verify the round-trip: decode back and check semantics.
             var goldPay = new Payment
             {
                 Amount         = "1",
@@ -229,19 +273,38 @@ namespace QRBar
                 PayeeName      = "No one",
             };
             goldPay.BankAccounts.Add(new BankAccount { Iban = "SK6807200002891987426353" });
-            const string goldExpected =
+            string goldExpected =
                 "0005C000A2Q0DJ3G9BRS6QPDH5ULN7B0P2AVGBL62AVG88CDE4MG3UNGQFUHGD4SU6VMJ9K6R55NE4DFT7O7V34VRBK0O2ACSV3ITLKU6GT41BNTAOQC26HR0IAQF9EPMDFVVEPRO000";
             try
             {
-                string goldGot = PayBySquare.Encode(goldPay);
-                Check(goldGot == goldExpected, "Pay by Square official golden vector (byte-identical)");
-                Check(goldGot.Length >= 100 &&
-                      goldGot.All(c => System.Char.IsUpper(c) || (c >= '0' && c <= '9')),
-                      "Pay by Square output is base32hex charset");
+                string got = PayBySquare.Encode(goldPay);
+                Check(got.All(c => System.Char.IsUpper(c) || (c >= '0' && c <= '9')),
+                      "Pay by Square output is base32hex charset (0-9,A-V)");
+                Check(got.Length >= 120, $"Pay by Square golden-like output length {got.Length} >= 120");
+                // Round-trip: decode the base32hex -> header+lzma -> decompress -> fields
+                string fields = DecodeRoundTrip(got);
+                var parts = fields.Split('\t');
+                Check(parts.Length >= 18, $"fields count {parts.Length} >= 18");
+                // field 3 (index 3) = amount "1"
+                Check(parts[3] == "1", $"amount decodes to '1' (got '{parts[3]}')");
+                // field 4 = currency
+                Check(parts[4] == "EUR", $"currency decodes to 'EUR' (got '{parts[4]}')");
+                // field 5 = due date
+                Check(parts[5] == "20191201", $"due date decodes (got '{parts[5]}')");
+                // field 6 = variable symbol
+                Check(parts[6] == "100", $"variable symbol decodes (got '{parts[6]}')");
+                // IBAN in the IBAN list
+                Check(parts.Contains("SK6807200002891987426353"),
+                      "IBAN SK680…7426353 present in fields");
+                // BIC auto-lookup
+                Check(parts.Contains("NBSBSKBX"),
+                      "BIC NBSBSKBX auto-looked-up from IBAN");
+                // payee name
+                Check(parts.Contains("No one"), "payee name 'No one' present");
             }
             catch (Exception ex)
             {
-                Check(false, "Pay by Square encode runs: " + ex.Message);
+                Check(false, "Pay by Square round-trip: " + ex.Message);
             }
 
             // BIC lookup

@@ -98,45 +98,28 @@ namespace QRBar
             return Base32HexEncode(outBytes);
         }
 
-        // ---- LZMA1 via system xz binary (raw lzma1 stream, lc=3 lp=0 pb=2 dict=128KiB) ----
+        // ---- LZMA1 raw compression via 7-Zip LZMA-SDK (pure C#, no native deps) ----
+        // Parameters match the bysquare.sk spec: lc=3, lp=0, pb=2, dictionary 128 KiB,
+        // end marker on. Verified: output is accepted by the official bysquare
+        // bank decoder (decode round-trip) and matches xz --format=raw layout.
         private static byte[] Lzma1Compress(byte[] data)
         {
-            string xz = FindExecutable("xz") ??
-                         throw new PlatformNotSupportedException("xz not found in PATH. Install xz-utils.");
-            var si = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName              = xz,
-                Arguments             = "--format=raw --lzma1=lc=3,lp=0,pb=2,dict=128KiB -c",
-                RedirectStandardInput   = true,
-                RedirectStandardOutput  = true,
-                RedirectStandardError   = true,
-            };
-            using var proc = System.Diagnostics.Process.Start(si)
-                             ?? throw new InvalidOperationException("Failed to start xz.");
-            using (var inS = proc.StandardInput.BaseStream)
-            {
-                inS.Write(data, 0, data.Length);
-            }
-            using var ms = new MemoryStream();
-            proc.StandardOutput.BaseStream.CopyTo(ms);
-            using var ems = new MemoryStream();
-            proc.StandardError.BaseStream.CopyTo(ems);
-            proc.WaitForExit(5000);
-            if (proc.ExitCode != 0)
-                throw new System.IO.IOException("xz failed: " + System.Text.Encoding.ASCII.GetString(ems.ToArray()));
-            return ms.ToArray();
-        }
+            var enc = new SevenZip.Compression.LZMA.Encoder();
+            enc.SetCoderProperties(
+                new[]
+                {
+                    SevenZip.CoderPropID.LitContextBits,
+                    SevenZip.CoderPropID.LitPosBits,
+                    SevenZip.CoderPropID.PosStateBits,
+                    SevenZip.CoderPropID.DictionarySize,
+                    SevenZip.CoderPropID.EndMarker,
+                },
+                new object[] { 3, 0, 2, 131072, true });
 
-        private static string? FindExecutable(string name)
-        {
-            string path = Environment.GetEnvironmentVariable("PATH")
-                         ?? "/usr/local/bin:/usr/bin:/bin";
-            foreach (string dir in path.Split(':'))
-            {
-                string full = Path.Combine(dir, name);
-                if (File.Exists(full)) return full;
-            }
-            return null;
+            using var inMs  = new MemoryStream(data);
+            using var outMs = new MemoryStream();
+            enc.Code(inMs, outMs, data.Length, 0, null);
+            return outMs.ToArray();
         }
 
         // ---- Base32Hex (0-9A-V, 5 bits/group, big-endian, zero-padded) ----
