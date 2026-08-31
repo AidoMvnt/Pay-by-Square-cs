@@ -1,0 +1,6 @@
+bin/
+obj/
+*.bmp
+*.png
+nayuki_ref/
+.DS_Store
