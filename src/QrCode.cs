@@ -1,7 +1,7 @@
 using System;
 using System.Text;
 
-namespace QRBar
+namespace PayBySquare
 {
     /// <summary>
     /// QR Code generator — verbatim C# port of Project Nayuki's qrcodegen (MIT License).

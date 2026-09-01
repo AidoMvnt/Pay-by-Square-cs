@@ -2,7 +2,7 @@ using System;
 using System.Text;
 using System.Collections.Generic;
 
-namespace QRBar
+namespace PayBySquare
 {
     /// <summary>A Pay by Square bank account (IBAN + optional BIC).</summary>
     public sealed class BankAccount

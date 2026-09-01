@@ -1,7 +1,7 @@
 ﻿using System;
 using System.IO;
 
-namespace QRBar
+namespace PayBySquare
 {
     public static class Program
     {
@@ -227,7 +227,7 @@ namespace QRBar
 
         public static int Run()
         {
-            Console.WriteLine("== QRBar unit tests ==");
+            Console.WriteLine("== Pay-by-Square (C#) unit tests ==");
 
             QrCode qr1 = QrCode.EncodeText("HELLO WORLD", QrCode.Ecc.Low);
             Check(qr1.Version == 1, "HELLO WORLD @L -> version 1");

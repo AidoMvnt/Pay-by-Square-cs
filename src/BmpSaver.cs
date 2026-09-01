@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 
-namespace QRBar
+namespace PayBySquare
 {
     /// <summary>
     /// Writes a boolean matrix (true = dark pixel) as a valid 1-bit monochrome
