@@ -315,7 +315,7 @@ namespace PayBySquare
             string fam = "DejaVu Sans, Arial, Helvetica, sans-serif";
 
             var sb = new StringBuilder();
-            sb.Append("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"").Append(g.W).Append('"');
+            sb.Append("<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"").Append(g.W).Append('"');
             sb.Append(" height=\"").Append(g.H).Append("\" viewBox=\"0 0 ").Append(g.W).Append(' ').Append(g.H).Append('"');
             sb.Append(" shape-rendering=\"crispEdges\">");
             sb.Append("<rect width=\"").Append(g.W).Append("\" height=\"").Append(g.H).Append("\" fill=\"#212121\"/>");
