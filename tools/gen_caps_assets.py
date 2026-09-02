@@ -12,9 +12,9 @@ PE and the element count can be large without hitting any method-size limit):
 
     public const int CapW   // wordmark width  (px)
     public const int CapH   // wordmark height (px, ~64)
-    public static readonly byte[] CAP_RGB   // CapW*CapH*3, row-major, white bg
+    public static readonly int[] CAP_RGB   // CapW*CapH packed 0xRRGGBB, row-major, white bg
     public const int IconSize = 64
-    public static readonly byte[] ICON_RGBA // 64*64*4
+    public static readonly int[] ICON_RGBA // 64*64 packed 0xAARRGGBB
     CapPixel(x,y) -> (r,g,b)
     IconPixel(x,y) -> (r,g,b,a)
 
@@ -63,10 +63,6 @@ def icon_rgba():
     return im.tobytes()
 
 
-def chunk(vals, per=12):
-    return ", ".join(str(v) for v in vals)
-
-
 def emit():
     W, H, cap = wordmark()
     ib = icon_rgba()
@@ -86,18 +82,29 @@ def emit():
     L.append(f"        public const int CapH = {H};")
     L.append("")
     ind = []
-    for s in range(0, len(cap), 12):
-        ind.append("            " + chunk(cap[s:s + 12]))
-    L.append(f"        public static readonly byte[] CAP_RGB = new byte[{len(cap)}] {{")
+    per = 16
+    capN = len(cap) // 3
+    for s in range(0, capN, per):
+        cnt = min(per, capN - s)
+        vals = ["0x%06x" % (cap[s + i * 3] << 16 | cap[s + i * 3 + 1] << 8 | cap[s + i * 3 + 2])
+                for i in range(cnt)]
+        ind.append("            " + ", ".join(vals))
+    L.append(f"        public static readonly int[] CAP_RGB = new int[{capN}] {{")
     L.append(",\n".join(ind))
     L.append("        };")
     L.append("")
     L.append(f"        public const int IconSize = {ICON_SIZE};")
     L.append("")
     ind = []
-    for s in range(0, len(ib), 12):
-        ind.append("            " + chunk(ib[s:s + 12]))
-    L.append(f"        public static readonly byte[] ICON_RGBA = new byte[{ICON_SIZE * ICON_SIZE * 4}] {{")
+    icN = len(ib) // 4
+    for s in range(0, icN, per):
+        cnt = min(per, icN - s)
+        vals = []
+        for i in range(cnt):
+            p = ib[s + i * 4] << 24 | ib[s + i * 4 + 1] << 16 | ib[s + i * 4 + 2] << 8 | ib[s + i * 4 + 3]
+            vals.append("0x%08x" % p if p < 0x80000000 else "-0x%08x" % (0x100000000 - p))
+        ind.append("            " + ", ".join(vals))
+    L.append(f"        public static readonly int[] ICON_RGBA = new int[{ICON_SIZE * ICON_SIZE}] {{")
     L.append(",\n".join(ind))
     L.append("        };")
     L.append("")
@@ -105,15 +112,15 @@ def emit():
     L.append("        {")
     L.append("            if (x < 0 || x >= CapW || y < 0 || y >= CapH)")
     L.append("                return (255, 255, 255);")
-    L.append("            int o = (y * CapW + x) * 3;")
-    L.append("            return (CAP_RGB[o], CAP_RGB[o + 1], CAP_RGB[o + 2]);")
+    L.append("            int p = CAP_RGB[(y * CapW + x)] & 0xFFFFFF;")
+    L.append("            return (p >> 16, p >> 8 & 255, p & 255);")
     L.append("        }")
     L.append("")
     L.append("        public static (int r, int g, int b, int a) IconPixel(int x, int y)")
     L.append("        {")
     L.append("            if (x < 0 || x >= IconSize || y < 0 || y >= IconSize) return (0, 0, 0, 0);")
-    L.append("            int o = (y * IconSize + x) * 4;")
-    L.append("            return (ICON_RGBA[o], ICON_RGBA[o + 1], ICON_RGBA[o + 2], ICON_RGBA[o + 3]);")
+    L.append("            int p = ICON_RGBA[(y * IconSize + x)];")
+    L.append("            return (p >> 16 & 255, p >> 8 & 255, p & 255, p >> 24 & 255);")
     L.append("        }")
     L.append("    }")
     L.append("}")

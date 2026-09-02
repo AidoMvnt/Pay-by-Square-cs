@@ -17,4 +17,14 @@ Verified: official bysquare bank decoder round-trip OK.
 Generate:
   dotnet run -- --pbs --iban SK6807200002891987426353 --amount 42.50 \
               --vs 2026090114 --cs 12345 --payee "Mainvent s.r.o." \
-              --date 20260930 --note "Faktura 14/26" --qr
+              --date 20260930 --note "Faktura 14/26" --qr              # -> pbs_payment.bmp  (1-bit QR, v1 21x21)
+  same + --tile                                                           # -> tile 540x665 (24-bit BMP)
+  same + --tile1                                                          # -> tile 540x665 (1-bit BMP)
+  same + --tilesvg                                                        # -> tile 540x665 (SVG)
+
+Samples in this folder:
+  pbs_payment.bmp            plain QR, 1-bit, 21x21 (v1)
+  pbs_payment.png            plain QR, 196x196 grayscale (4 px/module + quiet zone)
+  pbs_payment_tile_1bit.bmp  decorated tile, 1-bit, 540x665 (thresholded)
+  pbs_payment_tile_24bit.bmp decorated tile, 24-bit RGB, 540x665 (lossless)
+  pbs_payment_tile.svg       decorated tile, vector SVG (lossless, scalable)
