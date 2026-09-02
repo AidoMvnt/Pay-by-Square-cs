@@ -61,6 +61,8 @@ namespace PayBySquare
                     string iban = "", amount = "", vs = "", cs = "", ss = "",
                            payee = "", date = "", note = "", bic = "";
                     bool makeQr = false;
+                    bool makeTile = false, do1bitTile = false, doSvg = false;
+                    int? qrPixel = null;
                     for (int j = i + 1; j < args.Length; j++)
                     {
                         string a = args[j];
@@ -73,7 +75,12 @@ namespace PayBySquare
                         else if (a == "--date"  && j + 1 < args.Length) date  = args[++j];
                         else if (a == "--note"  && j + 1 < args.Length) note  = args[++j];
                         else if (a == "--bic"   && j + 1 < args.Length) bic   = args[++j];
-                        else if (a == "--qr") makeQr = true;
+                        else if (a == "--qr")    makeQr = true;
+                        else if (a == "--tile")  { makeQr = true; makeTile = true; }
+                        else if (a == "--tile1") { makeQr = true; makeTile = true; do1bitTile = true; }
+                        else if (a == "--tilesvg") { makeQr = true; makeTile = true; doSvg = true; }
+                        else if (a == "--qrp"   && j + 1 < args.Length) qrPixel = int.Parse(args[++j]);
+                        else if (a == "--qrpix" && j + 1 < args.Length) qrPixel = int.Parse(args[++j]);
                     }
                     if (iban == "")   throw new ArgumentException("--pbs requires --iban");
                     if (amount == "") throw new ArgumentException("--pbs requires --amount");
@@ -104,13 +111,38 @@ namespace PayBySquare
                         for (int y = 0; y < q.Size; y++)
                             for (int x = 0; x < q.Size; x++)
                                 mod[y, x] = q.GetModule(x, y);
-                        string outAbs = Path.GetFullPath(outPath);
-                        BmpSaver.Save(mod, outAbs);
-                        Console.WriteLine($"qr:       v{q.Version} {q.Size}x{q.Size} mask {q.Mask} -> {outAbs}");
+                        if (makeTile)
+                        {
+                            // Decorated tile (frame + "PAY by square" caption + icon)
+                            var deco = new QrTileDecorator();
+                            if (qrPixel.HasValue) deco.ModuleScale = qrPixel.Value;
+                            var (w, h, rgb) = deco.RenderTile(mod);
+                            string tileAbs = Path.GetFullPath(outPath);
+                            new Bmp24Saver().Save(w, h, rgb, tileAbs);           // lossless RGB
+                            Console.WriteLine($"tile(24): {w}x{h} -> {tileAbs} ({new FileInfo(tileAbs).Length} B)");
+                            if (do1bitTile)
+                            {
+                                string mono = Path.ChangeExtension(tileAbs, ".1.bmp");
+                                new BmpSaver().Save(w, h, rgb, mono);             // 1-bit (R&G&B > T)
+                                Console.WriteLine($"tile(1):  {w}x{h} -> {mono} ({new FileInfo(mono).Length} B)");
+                            }
+                            if (doSvg)
+                            {
+                                string svgPath = Path.ChangeExtension(tileAbs, ".svg");
+                                File.WriteAllText(svgPath, deco.ToSvg(mod));
+                                Console.WriteLine($"tile(svg): {w}x{h} -> {svgPath}");
+                            }
+                        }
+                        else
+                        {
+                            string outAbs = Path.GetFullPath(outPath);
+                            new BmpSaver().Save(mod, outAbs);
+                            Console.WriteLine($"qr:       v{q.Version} {q.Size}x{q.Size} mask {q.Mask} -> {outAbs}");
+                        }
                     }
-                    return 0;
+                    continue;   // don't exit the arg loop — allow more flags after --pbs
                 }
-                            if (args[i] == "--ecl" && i + 1 < args.Length)
+                if (args[i] == "--ecl" && i + 1 < args.Length)
                 {
                     if (!Enum.TryParse<QrCode.Ecc>(args[i + 1], true, out ecl))
                         throw new ArgumentException("Invalid --ecl value");
@@ -138,7 +170,7 @@ namespace PayBySquare
                     modules[y, x] = qr.GetModule(x, y);
 
             // bool[,] -> 1-bit BMP
-            BmpSaver.Save(modules, outPath);
+            new BmpSaver().Save(modules, outPath);
             string abs = Path.GetFullPath(outPath);
             Console.WriteLine($"bmp:     {abs} ({new FileInfo(abs).Length} B)");
             return 0;
@@ -270,7 +302,7 @@ namespace PayBySquare
             for (int y = 0; y < 21; y++)
                 for (int x = 0; x < 21; x++)
                     m[y, x] = (x + y) % 2 == 0;
-            BmpSaver.Save(m, tmp);
+            new BmpSaver().Save(m, tmp);
             byte[] raw = System.IO.File.ReadAllBytes(tmp);
             Check(raw[0] == (byte)'B' && raw[1] == (byte)'M', "'BM' signature");
             int fileSize = BitConverter.ToInt32(raw, 2);
@@ -371,6 +403,122 @@ namespace PayBySquare
             }
             catch { p1 = p2 = null; }
             Check(p1 != null && p1 == p2, "Pay by Square deterministic for identical input");
+
+            // ---- Decorated tile: ImageCodec family + QrTileDecorator ----
+            try
+            {
+                // shared tile geometry via a real payment QR
+                QrCode tqr = QrCode.EncodeText("PAYBY1234567890", QrCode.Ecc.Medium);
+                bool[,] tmod = new bool[tqr.Size, tqr.Size];
+                for (int y = 0; y < tqr.Size; y++)
+                    for (int x = 0; x < tqr.Size; x++) tmod[y, x] = tqr.GetModule(x, y);
+
+                var deco = new QrTileDecorator();
+                var (tw, th, rgb) = deco.RenderTile(tmod);
+                Check(tw > 0 && th > tw, $"tile is taller than wide (caption row) {tw}x{th}");
+                Check(rgb.Length == tw * th, $"tile rgb buffer size {rgb.Length} == {tw}*{th}");
+
+                // page corner = BG dark, card center region should be white where QR light
+                int corner = rgb[0];
+                Check(corner == 0x212121, $"page corner = BG color (got 0x{corner:X6})");
+
+                // QR area: top-left QR pixel is a finder dark module -> black
+                int qScale = deco.ModuleScale;
+                int n = tqr.Size;
+                int qpx = (int)(n * qScale * 0.08) + (int)Math.Max(2, (n * qScale) * 0.02) + (int)(n * qScale * 0.08);
+                int darkPix = rgb[qpx * th + qpx];
+                Check(darkPix == 0x000000, $"QR top-left module pixel is black (got 0x{darkPix:X6})");
+
+                // tile must contain an accent-colored pixel (the "PAY" caption) somewhere
+                bool hasAccent = false;
+                for (int i = 0; i < rgb.Length; i++)
+                    if (Math.Abs(((rgb[i] >> 16) & 0xFF) - 0x4A) < 40 &&
+                        Math.Abs(((rgb[i] >> 8) & 0xFF) - 0x6D) < 40 &&
+                        Math.Abs((rgb[i] & 0xFF) - 0x9C) < 40) { hasAccent = true; break; }
+                Check(hasAccent, "caption accent color present in the tile");
+
+                // Bmp24Saver (ImageCodec) round-trip: header + pixel check
+                string t24 = Path.Combine(Path.GetTempPath(), "tile24.bmp");
+                new Bmp24Saver().Save(tw, th, rgb, t24);
+                byte[] b24 = File.ReadAllBytes(t24);
+                Check(b24[0] == 'B' && b24[1] == 'M', "tile 24-bit BMP signature");
+                int bw = BitConverter.ToInt32(b24, 18);
+                int bh = BitConverter.ToInt32(b24, 22);
+                short bb = BitConverter.ToInt16(b24, 28);
+                Check(bw == tw && bh == th && bb == 24, $"24-bit BMP {bw}x{bh} bpp={bb} matches tile");
+                int dataStart24 = 14 + 40;
+                int rowBytes = ((tw * 3 + 3) & ~3);
+                // bottom-up: first stored row is the LAST image row (y = th-1, dark page bg)
+                int b0 = b24[dataStart24];           // B
+                int g0 = b24[dataStart24 + 1];       // G
+                int r0 = b24[dataStart24 + 2];       // R
+                Check(r0 == 0x21 && g0 == 0x21 && b0 == 0x21,
+                      $"24-bit BMP first pixel = BG (got 0x{r0:X2}{g0:X2}{b0:X2})");
+                int expect24 = 14 + 40 + rowBytes * th;
+                Check(b24.Length == expect24, $"24-bit BMP size {b24.Length} == {expect24}");
+
+                // BmpSaver 1-bit from the SAME rgb buffer: mixed colors -> 2 palette entries
+                string t1 = Path.Combine(Path.GetTempPath(), "tile1.bmp");
+                new BmpSaver().Save(tw, th, rgb, t1);
+                byte[] b1 = File.ReadAllBytes(t1);
+                Check(b1[0] == 'B' && b1[1] == 'M', "tile 1-bit BMP signature");
+                short b1bpp = BitConverter.ToInt16(b1, 28);
+                Check(b1bpp == 1, $"1-bit BMP bpp (got {b1bpp})");
+                int pal = 14 + 40;
+                Check(b1[pal] == 0xFF && b1[pal + 4] == 0x00, "1-bit BMP palette 0=white 1=black");
+                // page corner is dark (bg 0x212121 -> all <= 0x80 -> BLACK)
+                // bottom-up first stored pixel = bottom-left = page -> index 1 (black) -> bit 7 of first data byte
+                int d1 = 14 + 40 + 8;
+                Check((b1[d1] & 0x80) != 0, "1-bit BMP bottom-left page pixel = black");
+
+                // Threshold rule: R>0x80 & G>0x80 & B>0x80 -> white, else black.
+                // Recompute the expectation from the tile buffer and compare to the file.
+                int wrong = 0, total = 0;
+                int rowBytes1 = (tw + 7) / 8;
+                int rowPad1 = (rowBytes1 + 3) & ~3;
+                for (int y = 0; y < th; y++)
+                    for (int x = 0; x < tw; x++)
+                    {
+                        int rv = (rgb[y * tw + x] >> 16) & 0xFF;
+                        int gv = (rgb[y * tw + x] >> 8) & 0xFF;
+                        int bv = rgb[y * tw + x] & 0xFF;
+                        bool wantDark = !(rv > 0x80 && gv > 0x80 && bv > 0x80);
+                        int storedY = th - 1 - y;                 // bottom-up
+                        int byteOff = d1 + storedY * rowPad1 + (x >> 3);
+                        bool bit = (b1[byteOff] & (1 << (7 - (x & 7)))) != 0;
+                        if (bit != wantDark) wrong++;
+                        total++;
+                    }
+                Check(wrong == 0, $"1-bit threshold rule: {total} pixels, {wrong} mismatches " +
+                      $"(white iff R>0x80 & G>0x80 & B>0x80)");
+
+                File.Delete(t24); File.Delete(t1);
+
+                // SVG tile: self-contained, decodable layout
+                string svg = deco.ToSvg(tmod);
+                Check(svg.StartsWith("<svg") && svg.EndsWith("</svg>"), "tile SVG is a well-formed svg root");
+                Check(svg.Contains("PAY"), "tile SVG contains 'PAY' caption");
+                Check(svg.Contains("by square"), "tile SVG contains 'by square' caption");
+                Check(svg.Contains("data:image/svg+xml;base64,") || svg.Contains("fill=\"#7fa8d0\" rx="),
+                      "tile SVG embeds the icon (asset data URI or generic fallback)");
+                Check(svg.Contains("fill=\"#212121\""), "tile SVG has the dark page rect");
+                Check(svg.Contains("shape-rendering=\"crispEdges\""), "tile SVG uses crispEdges");
+                var qrRects = System.Text.RegularExpressions.Regex.Matches(svg, "M[0-9]+ [0-9]+h[0-9]+v[0-9]+h-[0-9]+z");
+                Check(qrRects.Count > 20, $"tile SVG draws QR modules ({qrRects.Count})");
+                // right-alignment: icon x must land in the right half of the canvas
+                var iconXMatch = System.Text.RegularExpressions.Regex.Match(svg, @"<image x=""(\d+)""");
+                bool rightAligned = !iconXMatch.Success;   // no <image> (font-only fallback) is fine too
+                if (iconXMatch.Success)
+                {
+                    int ix = int.Parse(iconXMatch.Groups[1].Value);
+                    rightAligned = ix >= tw / 2 && ix < tw;
+                }
+                Check(rightAligned, "tile SVG icon right-aligned (in right half, inside canvas)");
+            }
+            catch (Exception ex)
+            {
+                Check(false, "decorated tile round-trip: " + ex.Message);
+            }
 
             Console.WriteLine($"\n== {_passed} passed, {_failed} failed ==");
             return _failed == 0 ? 0 : 1;
