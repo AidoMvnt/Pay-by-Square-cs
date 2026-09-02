@@ -7,3 +7,4 @@ nayuki_ref/
 # test artifacts (committed for the docs)
 !samples/
 !samples/**
+/src/qr_*.svg
