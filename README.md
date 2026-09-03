@@ -47,11 +47,12 @@ validated as digits-only (length-limited) per the SK spec.
   (https://github.com/nayuki/QR-Code-generator, MIT License), originally from the
   C reference implementation, adapted to C#.
 - **LZMA1 compression:** `src/Lzma1Encoder.cs` — a self-contained pure-C# LZMA1
-  range coder (hash-chain match finding, lc/lp/pb-configurable). **AI-generated:
-  written with Claude Code** (Anthropic's coding agent). Follows the LZMA
-  algorithm authored by Igor Pavlov (7‑Zip, public-domain-style license);
-  no NuGet package required. Verified byte-by-byte against the independent
-  `LZMA-SDK` reference decoder in the test project.
+  range coder (hash-chain match finding, lc/lp/pb-configurable). AI-generated
+  with Claude Code, as part of a multi-agent project (see
+  "How it was generated"). Follows the LZMA algorithm authored by Igor Pavlov
+  (7‑Zip, public-domain-style license); no NuGet package required. Verified
+  byte-by-byte against the independent `LZMA-SDK` reference decoder in the
+  test project.
 - **Pay by Square wire format:** the field ordering, CRC32, LZMA1 parameters and
   Base32Hex layout follow the **bysquare.sk** official reference
   implementation; the BIC dictionary is derived from that same reference
@@ -59,14 +60,16 @@ validated as digits-only (length-limited) per the SK spec.
 
 ## How it was generated
 
-This implementation was **AI-generated: written with Claude Code**
-(Anthropic's coding agent) while assisting Martin. The agent drew on: the
-Nayuki QR reference, the `bysquare` (npm) + `skqr` (PHP) reference
-implementations for the Pay by Square wire format and BIC dictionary, and a
-pure-C# LZMA1 encoder. Golden test vectors and decode round-trips (verified
-against the independent LZMA-SDK reference decoder and the `bysquare` npm
-decoder) were used to validate byte-compatibility. No proprietary payment data
-has been baked in.
+This implementation is a collaborative, **AI-generated** project — written with
+**Claude Code** (Anthropic's coding agent), **Hermes Agent** (the orchestration
+assistant driving the session), **Qwen 3.8-128K** (used for coding work) and
+**Gemma 4-128K** (primary chat model), both of the latter two running locally
+on Ollama — while assisting Martin. The agents drew on: the Nayuki QR
+reference, the `bysquare` (npm) + `skqr` (PHP) reference implementations for
+the Pay by Square wire format and BIC dictionary, and a pure-C# LZMA1 encoder.
+Golden test vectors and decode round-trips (verified against the independent
+LZMA-SDK reference decoder and the `bysquare` npm decoder) were used to
+validate byte-compatibility. No proprietary payment data has been baked in.
 
 ## License
 

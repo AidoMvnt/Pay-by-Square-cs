@@ -3,7 +3,8 @@ using System.Collections.Generic;
 
 /// <summary>
 /// Lzma1Encoder — pure C# LZMA1 compressor.
-/// AI-generated (written with Claude Code).
+/// AI-generated with Claude Code, as part of a multi-agent project
+/// (Claude Code, Hermes Agent, Qwen 3.8-128K, Gemma 4-128K) — see README.
 ///
 /// Two modes:
 ///   Compress(data)     -> standard 13-byte-header .lzma stream
