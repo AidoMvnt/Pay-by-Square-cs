@@ -41,6 +41,9 @@ namespace PayBySquare
         internal static int Pack(int r, int g, int b) =>
             ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b & 0xFF);
 
+        internal static string ToHex(int r, int g, int b) =>
+            "#" + r.ToString("X2") + g.ToString("X2") + b.ToString("X2");
+
         // ---- state ----
         private readonly Asset _asset;
         private readonly Layout? _layout;
@@ -352,10 +355,15 @@ namespace PayBySquare
             string fam = "DejaVu Sans, Arial, Helvetica, sans-serif";
 
             var sb = new StringBuilder();
+            // SVG is the vector equivalent of the 24-bit COLOR tile:
+            // brand-colour wordmark + icon on either the dark or light page.
+            // (The 1-bit / print path with flat ink lives in the 1-bit BMP path,
+            // not here.) Only the page background follows Page.
+            var pageHex = ToHex(Page.R, Page.G, Page.B);
             sb.Append("<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"").Append(g.W).Append('"');
             sb.Append(" height=\"").Append(g.H).Append("\" viewBox=\"0 0 ").Append(g.W).Append(' ').Append(g.H).Append('"');
             sb.Append(" shape-rendering=\"crispEdges\">");
-            sb.Append("<rect width=\"").Append(g.W).Append("\" height=\"").Append(g.H).Append("\" fill=\"#212121\"/>");
+            sb.Append("<rect width=\"").Append(g.W).Append("\" height=\"").Append(g.H).Append("\" fill=\"").Append(pageHex).Append("\"/>");
 
             int side = g.frame - 2 * g.border;
             sb.Append("<rect x=\"").Append(g.border).Append("\" y=\"").Append(g.border).Append('"');
