@@ -82,7 +82,7 @@ namespace PayBySquare
         {
             public int n, scale, pad, border, frame;
             public int fontPx, iconPx, gapTop, capH, gapBot, W, H;
-            public int qrX, qrY, cardRad, capTop, iconX, iconY;
+            public int qrX, qrY, cardRad, capTop, iconX, iconY, iconGap;
 
             public Geo(int n, int scale, bool icon, bool caption)
             {
@@ -106,6 +106,8 @@ namespace PayBySquare
                 {
                     capTop = frame + gapTop;
                     iconY = capTop + (capH - iconPx) / 2;
+                    // text -> icon gap (same value for bitmap and SVG)
+                    iconGap = icon ? Math.Max(10, (int)Math.Round(iconPx * 0.18)) : 0;
                     iconX = W - pad - (icon ? iconPx : 0);
                 }
             }
@@ -180,7 +182,7 @@ namespace PayBySquare
             // 4) caption row: baked wordmark bitmap + brand icon
             if (g.capH > 0)
             {
-                DrawWordmark(g.iconX, g.capTop, g.capH, g.fontPx, buf, W, H);
+                DrawWordmark(g.iconX, g.capTop, g.capH, g.fontPx, g.iconGap, buf, W, H);
                 if (g.iconPx > 0)
                     DrawIcon(g.iconX, g.iconY, g.iconPx, buf, W, H);
             }
@@ -195,7 +197,7 @@ namespace PayBySquare
         /// and right-aligned so its right edge sits just before the icon
         /// (or the card's right pad when the icon is hidden).
         /// </summary>
-        private void DrawWordmark(int iconX, int capTop, int capH, int fontPx, int[] buf, int W, int H)
+        private void DrawWordmark(int iconX, int capTop, int capH, int fontPx, int iconGap, int[] buf, int W, int H)
         {
             if (fontPx <= 0 || capH <= 0) return;
             int capW = _asset.CapW;
@@ -206,10 +208,10 @@ namespace PayBySquare
             int dw = (int)Math.Round(fontPx * (double)capW / capHr);
             if (dw <= 0) return;
 
-            // Right-alignment: leave a small gap before the icon; without an
-            // icon, stop at the card's right pad.
+            // Right-alignment: leave the text->icon gap before the icon;
+            // without an icon, stop at the card's right pad.
             int minLeft = Math.Max(4, (int)Math.Round(W * 0.01));
-            int right = (iconX < W) ? Math.Max(minLeft + 1, iconX - 4) : W - minLeft;
+            int right = (iconX < W) ? Math.Max(minLeft + 1, iconX - iconGap) : W - minLeft;
             int left = right - dw;
 
             // Vertical centre inside the caption row.
@@ -347,15 +349,20 @@ namespace PayBySquare
 
             if (g.capH > 0)
             {
-                int midY = g.capTop + g.capH / 2;
-                // Approximate the baked wordmark's width at fontPx height, then
-                // right-align the two <text> segments before the icon.
-                int capW = _asset.CapW; int capHr = _asset.CapH;
-                int wordPx = (capHr > 0) ? (int)Math.Round(g.fontPx * (double)capW / capHr) : g.fontPx * 7;
-                int right = (g.iconPx > 0) ? g.iconX - 4 : g.W - Math.Max(4, (int)Math.Round(g.W * 0.01));
-                int xBy = right - wordPx;
-                sb.Append(SvgText(xBy, midY, CapBy, g.fontPx, "#d8dde2", fam, "400"));
-                sb.Append(SvgText(Math.Max(4, xBy - (int)Math.Round(wordPx * 0.38) - 4), midY, CapPay, g.fontPx, "#4a6d9c", fam, "700"));
+                int midY = g.capTop + g.capH / 2;        // vertical centre of caption row
+                // Two plain <text> runs (tspan + text-anchor="end" overlaps
+                // in some renderers).  Segment offsets use the baker's exact
+                // widths scaled by the viewer font size: the wordmark was
+                // baked with a 64 px font (SIZE in gen_caps_assets.py), so a
+                // baked unit is (fontPx/64) viewer px wide.
+                const int capFont = 64;                 // baker font size (px)
+                double k = g.fontPx / (double)capFont;
+                int wTotal = (int)Math.Round(TileAssets.CapW * k);
+                int right = (g.iconPx > 0) ? g.iconX - g.iconGap : g.W - Math.Max(4, (int)Math.Round(g.W * 0.01));
+                int xPay = right - wTotal;
+                int xBy = xPay + (int)Math.Round((TileAssets.SegPay + TileAssets.SegGap) * TileAssets.CapW * k / 1024.0);
+                sb.Append(SvgText(xPay, midY, CapPay, g.fontPx, "#73A6D8", fam, "700", null));
+                sb.Append(SvgText(xBy, midY, CapBy, g.fontPx, "#A6A7AA", fam, "400", null));
                 if (g.iconPx > 0)
                     sb.Append(IconSvg(g.iconX, g.iconY, g.iconPx));
             }
@@ -363,13 +370,16 @@ namespace PayBySquare
             return sb.ToString();
         }
 
-        private static string SvgText(int x, int midY, string t, int fontPx, string fill, string family, string weight)
+        private static string SvgText(int x, int midY, string t, int fontPx, string fill, string family, string weight, string anchor)
         {
             var sb = new StringBuilder();
             sb.Append("<text x=\"").Append(x).Append("\" y=\"").Append(midY).Append('"');
             sb.Append(" font-family=\"").Append(family).Append('"');
             sb.Append(" font-size=\"").Append(fontPx).Append("\" fill=\"").Append(fill).Append('"');
-            sb.Append(" font-weight=\"").Append(weight).Append("\" dominant-baseline=\"central\">");
+            sb.Append(" font-weight=\"").Append(weight).Append('"');
+            if (anchor != null)
+                sb.Append(" text-anchor=\"").Append(anchor).Append('"');
+            sb.Append(" dominant-baseline=\"central\">");
             sb.Append(WebUtility.HtmlEncode(t));
             sb.Append("</text>");
             return sb.ToString();
