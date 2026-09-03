@@ -15,29 +15,28 @@ that Slovak banks expect, and renders it as a scannable QR Code (BMP/PNG).
   A verbatim C# port of Project Nayuki's `qrcodegen` (see license notes below).
 - **Pay by Square layer** — builds the tab-separated field record, prepends a
   little-endian CRC32, compresses with **LZMA1** (`lc=3, lp=0, pb=2`, dictionary
-  128 KiB, end-marker on) using the pure-C# `LZMA-SDK` package (7‑Zip lineage),
-  wraps in the 4-byte header, and encodes to **Base32Hex**. Output is
-  byte-compatible with the official `bysquare` bank decoder (verified by
-  decode round-trip).
-- **OS independent** — pure managed code on .NET, no GDI/system calls. The only
-  external dependency is the NuGet `LZMA-SDK` package. Runs on Windows, Linux and
-  macOS.
-- **Tests** — 42 self-test cases (`--test`), including field-level decode
-  round-trip and symbol validation.
+  128 KiB, end-marker on) using a **pure-C# LZMA1 encoder with zero dependencies**
+  (`src/Lzma1Encoder.cs`), wraps in the 4-byte header, and encodes to **Base32Hex**.
+  Output is byte-compatible with the official `bysquare` bank decoder (verified by
+  decode round-trip against the independent 7‑Zip `LZMA-SDK` reference decoder).
+- **OS independent** — pure managed code on .NET, no GDI/system calls, and
+  **no NuGet packages at all** in the generator. Runs on Windows, Linux and macOS.
+- **Tests** — 64 unit tests in a dedicated `test/` project, including field-level
+  decode round-trip (independent `LZMA-SDK` decoder) and symbol validation.
 
 ## Quick start
 
 ```
-# unit tests
-dotnet run -- --test
+# unit tests (separate test project; may use libraries for independent verification)
+dotnet run --project test
 
 # Pay by Square QR (Slovakia)
-dotnet run -- --pbs --iban SK6807200002891987426353 --amount 42.50 \
+dotnet run --project src -- --pbs --iban SK6807200002891987426353 --amount 42.50 \
              --vs 2026090114 --cs 12345 --payee "Mainvent s.r.o." \
              --date 20260930 --note "Faktura 14/26" --qr
 ```
 
-CLI options: `--test`, `--help`, and the `--pbs` mode (`--iban`, `--amount`,
+CLI options: `--help`, and the `--pbs` mode (`--iban`, `--amount`,
 `--vs`, `--cs`, `--ss`, `--payee`, `--street`, `--city`, `--payer`, `--date`,
 `--note`, `--bic`, `--ecl`, `--qr`). Variable/constant/specific symbols are
 validated as digits-only (length-limited) per the SK spec.
@@ -47,9 +46,11 @@ validated as digits-only (length-limited) per the SK spec.
 - **QR Code generator:** port of **Project Nayuki — QR Code generator**
   (https://github.com/nayuki/QR-Code-generator, MIT License), originally from the
   C reference implementation, adapted to C#.
-- **LZMA1 compression:** [LZMA-SDK](https://www.nuget.org/packages/LZMA-SDK)
-  NuGet package — a C# port of the 7‑Zip LZMA SDK. The LZMA range coder was
-  authored by Igor Pavlov and released under a public-domain-style license.
+- **LZMA1 compression:** `src/Lzma1Encoder.cs` — a self-contained pure-C# LZMA1
+  range coder (hash-chain match finding, lc/lp/pb-configurable). Follows the
+  LZMA algorithm authored by Igor Pavlov (7‑Zip, public-domain-style license);
+  no NuGet package required. Verified byte-by-byte against the independent
+  `LZMA-SDK` reference decoder in the test project.
 - **Pay by Square wire format:** the field ordering, CRC32, LZMA1 parameters and
   Base32Hex layout follow the **bysquare.sk** official reference
   implementation; the BIC dictionary is derived from that same reference

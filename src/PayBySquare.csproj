@@ -9,8 +9,8 @@
     <AssemblyName>PayBySquare</AssemblyName>
   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="LZMA-SDK" Version="22.1.1" />
-  </ItemGroup>
+  <!-- No PackageReferences: the generator is 100% dependency-free.
+       Tests live in ../test (PayBySquare.Tests), which may use libraries
+       for independent verification (LZMA-SDK as reference decoder). -->
 
 </Project>

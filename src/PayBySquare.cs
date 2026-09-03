@@ -130,28 +130,15 @@ namespace PayBySquare
             return Base32HexEncode(outBytes);
         }
 
-        // ---- LZMA1 raw compression via 7-Zip LZMA-SDK (pure C#, no native deps) ----
-        // Parameters match the bysquare.sk spec: lc=3, lp=0, pb=2, dictionary 128 KiB,
-        // end marker on. Verified: output is accepted by the official bysquare
-        // bank decoder (decode round-trip) and matches xz --format=raw layout.
+        // ---- LZMA1 raw compression (pure C#, zero dependencies) ----
+        // Parameters match the bysquare.sk spec: lc=3, lp=0, pb=2, dictionary
+        // 128 KiB, end marker on, no 5-byte property header (decoder gets
+        // lc/lp/pb/dict out-of-band, exactly like xz --format=raw).
+        // Verified: output decodes byte-identically with the independent
+        // 7-Zip LZMA-SDK decoder AND xz (see test/ project).
         private static byte[] Lzma1Compress(byte[] data)
         {
-            var enc = new SevenZip.Compression.LZMA.Encoder();
-            enc.SetCoderProperties(
-                new[]
-                {
-                    SevenZip.CoderPropID.LitContextBits,
-                    SevenZip.CoderPropID.LitPosBits,
-                    SevenZip.CoderPropID.PosStateBits,
-                    SevenZip.CoderPropID.DictionarySize,
-                    SevenZip.CoderPropID.EndMarker,
-                },
-                new object[] { 3, 0, 2, 131072, true });
-
-            using var inMs  = new MemoryStream(data);
-            using var outMs = new MemoryStream();
-            enc.Code(inMs, outMs, data.Length, 0, null);
-            return outMs.ToArray();
+            return Lzma1Encoder.CompressRaw(data, lc: 3, lp: 0, pb: 2, dictSize: 131072);
         }
 
         // ---- Base32Hex (0-9A-V, 5 bits/group, big-endian, zero-padded) ----
