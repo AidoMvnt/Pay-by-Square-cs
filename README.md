@@ -47,8 +47,9 @@ validated as digits-only (length-limited) per the SK spec.
   (https://github.com/nayuki/QR-Code-generator, MIT License), originally from the
   C reference implementation, adapted to C#.
 - **LZMA1 compression:** `src/Lzma1Encoder.cs` — a self-contained pure-C# LZMA1
-  range coder (hash-chain match finding, lc/lp/pb-configurable). Follows the
-  LZMA algorithm authored by Igor Pavlov (7‑Zip, public-domain-style license);
+  range coder (hash-chain match finding, lc/lp/pb-configurable). **AI-generated:
+  written with Claude Code** (Anthropic's coding agent). Follows the LZMA
+  algorithm authored by Igor Pavlov (7‑Zip, public-domain-style license);
   no NuGet package required. Verified byte-by-byte against the independent
   `LZMA-SDK` reference decoder in the test project.
 - **Pay by Square wire format:** the field ordering, CRC32, LZMA1 parameters and
