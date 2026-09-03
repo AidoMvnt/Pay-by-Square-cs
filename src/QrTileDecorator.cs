@@ -224,8 +224,9 @@ namespace PayBySquare
                     int tx = left + dx;
                     if (tx < 0 || tx >= W) continue;
 
-                    // 4×4 supersampled average of the wordmark bitmap.
-                    int ar = 0, ag = 0, ab = 0;
+                    // 4×4 supersampled premultiplied average of the wordmark
+                    // bitmap (real alpha channel — no luminance guesswork).
+                    int ar = 0, ag = 0, ab = 0, aa = 0;
                     for (int sy = 0; sy < AA; sy++)
                         for (int sx = 0; sx < AA; sx++)
                         {
@@ -233,23 +234,23 @@ namespace PayBySquare
                             int iy = (int)((dy + (sy + 0.5) / AA) * capHr / (double)fontPx);
                             if (ix < 0) ix = 0; else if (ix >= capW) ix = capW - 1;
                             if (iy < 0) iy = 0; else if (iy >= capHr) iy = capHr - 1;
-                            var (pr, pg, pb) = _asset.CapPixel(ix, iy);
-                            ar += pr; ag += pg; ab += pb;
+                            var cp = _asset.CapPixel(ix, iy);
+                            ar += cp.r * cp.a; ag += cp.g * cp.a; ab += cp.b * cp.a; aa += cp.a;
                         }
-                    int r = ar / (AA * AA), gch = ag / (AA * AA), b = ab / (AA * AA);
+                    int n = AA * AA;
+                    if (aa == 0) continue;              // fully transparent
+                    int al = (aa + n / 2) / n;          // averaged coverage 0..255
+                    // average premultiplied ink 0..255 = (Σ c·a) / (255·n)
+                    int dn = 255 * n;                   // = 40800
+                    int pr = (ar + dn / 2) / dn, pg = (ag + dn / 2) / dn, pb = (ab + dn / 2) / dn;
 
-                    // The wordmark was flattened on white. Ink opacity is
-                    // derived from how far the pixel deviates from white.
-                    int mean = (r + gch + b) / 3;
-                    if (mean >= 254) continue;           // white → transparent
-                    int al = 255 - mean;
-
+                    // alpha-over: out = premultipliedInk + back * (1 - alpha)
                     int back = buf[ty * W + tx];
                     int br = (back >> 16) & 0xFF, bgr = (back >> 8) & 0xFF, bb = back & 0xFF;
                     buf[ty * W + tx] = Pack(
-                        (r * al + br * (255 - al)) / 255,
-                        (gch * al + bgr * (255 - al)) / 255,
-                        (b * al + bb * (255 - al)) / 255);
+                        Math.Min(255, pr + br * (255 - al) / 255),
+                        Math.Min(255, pg + bgr * (255 - al) / 255),
+                        Math.Min(255, pb + bb * (255 - al) / 255));
                 }
             }
         }

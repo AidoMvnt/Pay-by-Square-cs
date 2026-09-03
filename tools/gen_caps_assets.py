@@ -11,8 +11,8 @@ Output shape (all `static readonly`, so the literals are blob-backed in the
 PE and the element count can be large without hitting any method-size limit):
 
     public const int CapW   // wordmark width  (px)
-    public const int CapH   // wordmark height (px, ~64)
-    public static readonly int[] CAP_RGB   // CapW*CapH packed 0xRRGGBB, row-major, white bg
+    public const int CapH   // wordmark height  (px, ~64)
+    public static readonly int[] CAP_RGBA  // CapW*CapH packed 0xAARRGGBB, row-major, transparent bg
     public const int IconSize = 64
     public static readonly int[] ICON_RGBA // 64*64 packed 0xAARRGGBB
     CapPixel(x,y) -> (r,g,b)
@@ -31,15 +31,21 @@ BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 REGULAR = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 PAY_TEXT = "PAY"
 BY_TEXT = "by square"
-PAY_COLOR = (0x4A, 0x6D, 0x9C)           # accent blue for "PAY"
-BY_COLOR = (0xD8, 0xDD, 0xE2)           # light ink for "by square"
+PAY_COLOR = (0x73, 0xA6, 0xD8)           # "PAY" — same brand blue as the icon
+BY_COLOR = (0xA6, 0xA7, 0xAA)           # "by square" — medium grey, clearly legible
 CARD = (0xFF, 0xFF, 0xFF)               # flatten the wordmark onto white
 ICON = os.path.join(ROOT, "assets", "card.png")
 ICON_SIZE = 64
 
 
 def wordmark():
-    """Render 'PAY  by square' on white at ~64 px. Returns (w, h, rgba->rgb bytes)."""
+    """Render 'PAY  by square' with true per-pixel alpha.
+
+    Technique: draw each word (white) onto a black L-mask -> pure coverage;
+    then composite a flat ink colour with that mask as alpha.  The result
+    (W, H, RGBA bytes) keeps *pure* ink colours and a real alpha channel, so
+    the C# side can composite correctly on ANY background.
+    """
     fB = ImageFont.truetype(BOLD, SIZE)
     fR = ImageFont.truetype(REGULAR, SIZE)
     ascB, descB = fB.getmetrics()
@@ -50,11 +56,22 @@ def wordmark():
     wBY = int(round(fR.getlength(BY_TEXT)))
     W = int(round(wPAY + GAP + wBY)) + 2
 
-    canvas = Image.new("RGB", (W, H), CARD)
-    d = ImageDraw.Draw(canvas)
-    d.text((0, baseline - ascB), PAY_TEXT, font=fB, fill=PAY_COLOR)
-    d.text((int(round(wPAY + GAP)), baseline - ascR), BY_TEXT, font=fR, fill=BY_COLOR)
-    return W, H, canvas.tobytes()
+    def word_mask(text, font, x, y):
+        m = Image.new("L", (W, H), 0)
+        ImageDraw.Draw(m).text((x, y), text, font=font, fill=255)
+        return m
+
+    transparent = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    for text, font, x, color in (
+        (PAY_TEXT, fB, 0, PAY_COLOR),
+        (BY_TEXT, fR, int(round(wPAY + GAP)), BY_COLOR),
+    ):
+        mask = word_mask(text, font, x, baseline - (ascB if font is fB else ascR))
+        solid = Image.new("RGBA", (W, H), color + (255,))
+        canvas = Image.composite(solid, transparent, mask)
+        transparent = canvas
+
+    return W, H, transparent.tobytes()
 
 
 def icon_rgba():
@@ -82,14 +99,17 @@ def emit():
     L.append(f"        public const int CapH = {H};")
     L.append("")
     ind = []
-    per = 16
-    capN = len(cap) // 3
-    for sb in range(0, len(cap), per * 3):
-        cnt = min(per, (len(cap) - sb) // 3)
-        vals = ["0x%06x" % (cap[sb + i * 3] << 16 | cap[sb + i * 3 + 1] << 8 | cap[sb + i * 3 + 2])
-                for i in range(cnt)]
+    per = 12
+    capN = len(cap) // 4
+    for sb in range(0, len(cap), per * 4):
+        cnt = min(per, (len(cap) - sb) // 4)
+        vals = []
+        for i in range(cnt):
+            r = cap[sb + i * 4]; g = cap[sb + i * 4 + 1]; b = cap[sb + i * 4 + 2]; a = cap[sb + i * 4 + 3]
+            p = a << 24 | r << 16 | g << 8 | b
+            vals.append("0x%08x" % p if p < 0x80000000 else "-0x%08x" % (0x100000000 - p))
         ind.append("            " + ", ".join(vals))
-    L.append(f"        public static readonly int[] CAP_RGB = new int[{capN}] {{")
+    L.append(f"        public static readonly int[] CAP_RGBA = new int[{capN}] {{")
     L.append(",\n".join(ind))
     L.append("        };")
     L.append("")
@@ -109,12 +129,12 @@ def emit():
     L.append(",\n".join(ind))
     L.append("        };")
     L.append("")
-    L.append("        public static (int r, int g, int b) CapPixel(int x, int y)")
+    L.append("        public static (int r, int g, int b, int a) CapPixel(int x, int y)")
     L.append("        {")
     L.append("            if (x < 0 || x >= CapW || y < 0 || y >= CapH)")
-    L.append("                return (255, 255, 255);")
-    L.append("            int p = CAP_RGB[(y * CapW + x)] & 0xFFFFFF;")
-    L.append("            return (p >> 16, p >> 8 & 255, p & 255);")
+    L.append("                return (0, 0, 0, 0);")
+    L.append("            int p = CAP_RGBA[(y * CapW + x)];")
+    L.append("            return (p >> 16 & 255, p >> 8 & 255, p & 255, p >> 24 & 255);")
     L.append("        }")
     L.append("")
     L.append("        public static (int r, int g, int b, int a) IconPixel(int x, int y)")

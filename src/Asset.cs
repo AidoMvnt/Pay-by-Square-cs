@@ -30,10 +30,10 @@ namespace PayBySquare
         public int IconSize => TileAssets.IconSize;
 
         /// <summary>
-        /// Sample the wordmark bitmap at <c>(x, y)</c>.
-        /// Out-of-range coordinates return white (the flattened background).
+        /// Sample the wordmark bitmap at <c>(x, y)</c> as RGBA (true alpha).
+        /// Out-of-range coordinates return fully transparent.
         /// </summary>
-        public (int r, int g, int b) CapPixel(int x, int y) => TileAssets.CapPixel(x, y);
+        public (int r, int g, int b, int a) CapPixel(int x, int y) => TileAssets.CapPixel(x, y);
 
         /// <summary>
         /// Sample the icon at <c>(x, y)</c> as RGBA.
