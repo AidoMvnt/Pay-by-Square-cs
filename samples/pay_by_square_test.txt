@@ -9,22 +9,30 @@ due:    2026-09-30
 payee:  Mainvent s.r.o.
 note:   Faktura 14/26
 
-QRBar string:
-0007C0001CQ3LNA3931371KTN1LCN4B00KHAG7RS45NJE8JFPBGEGF3BQFPRFJS2BT838M370U9STO18QEHPCF6SA6LL4R6T24J2LL637HJAI216LQ7H9P950K0P4VOV1T8I12LDVI720TFRKE9OCGVDFJI727RGHK4C1BM2BBLECKK3BVVUAAT000
+QRBar string (186 chars, base32hex):
+0007C0001CQ3LNA3931371KTN1LCN4B00KHAG7RS45NJE8JFPBGEGF3BQFPR
+FJS2BT838M370U9STO18QEHPCF6SA6LL4R6T24J2LL637HJAI216LQ7H9P95
+0K0P4VOV1T8I12LDVI720TFRKE9OCGVDFJI727RGHK4C1BM2BBLECKK3BVV
+UAAT000
 
-Verified: official bysquare bank decoder round-trip OK.
+Verified:
+  - C# pbstring byte-for-byte == jsQR-decoded QR string (all 3 renders)
+  - official bysquare bank decoder round-trip OK
 
-Generate:
+Generate (all from the C# CLI):
   dotnet run -- --pbs --iban SK6807200002891987426353 --amount 42.50 \
               --vs 2026090114 --cs 12345 --payee "Mainvent s.r.o." \
-              --date 20260930 --note "Faktura 14/26" --qr              # -> pbs_payment.bmp  (1-bit QR, v1 21x21)
-  same + --tile                                                           # -> tile 540x665 (24-bit BMP)
-  same + --tile1                                                          # -> tile 540x665 (1-bit BMP)
-  same + --tilesvg                                                        # -> tile 540x665 (SVG)
+              --date 20260930 --note "Faktura 14/26" \
+              --qr          # -> undecorated 1-bit QR
+              --tile        # -> decorated 24-bit RGB tile
+              --tile1       # -> decorated 1-bit tile
+              --tilesvg     # -> decorated vector SVG
 
 Samples in this folder:
-  pbs_payment.bmp            plain QR, 1-bit, 21x21 (v1)
-  pbs_payment.png            plain QR, 196x196 grayscale (4 px/module + quiet zone)
-  pbs_payment_tile_1bit.bmp  decorated tile, 1-bit, 540x665 (thresholded)
-  pbs_payment_tile_24bit.bmp decorated tile, 24-bit RGB, 540x665 (lossless)
+  pbs_payment.bmp            plain 1-bit QR, 49x49 (v8, L/Ecc M)
+  pbs_payment_tile_24bit.bmp decorated tile, 24-bit RGB, 588x723 (lossless)
+  pbs_payment_tile_1bit.bmp  decorated tile, 1-bit B/W, 588x723 (thresholded)
   pbs_payment_tile.svg       decorated tile, vector SVG (lossless, scalable)
+
+All three QR renders decode to the same 186-char pbstring (verified via
+node bin/qrdecode.cjs + jsQR against the C# --pbs output).

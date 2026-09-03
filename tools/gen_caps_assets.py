@@ -84,9 +84,9 @@ def emit():
     ind = []
     per = 16
     capN = len(cap) // 3
-    for s in range(0, capN, per):
-        cnt = min(per, capN - s)
-        vals = ["0x%06x" % (cap[s + i * 3] << 16 | cap[s + i * 3 + 1] << 8 | cap[s + i * 3 + 2])
+    for sb in range(0, len(cap), per * 3):
+        cnt = min(per, (len(cap) - sb) // 3)
+        vals = ["0x%06x" % (cap[sb + i * 3] << 16 | cap[sb + i * 3 + 1] << 8 | cap[sb + i * 3 + 2])
                 for i in range(cnt)]
         ind.append("            " + ", ".join(vals))
     L.append(f"        public static readonly int[] CAP_RGB = new int[{capN}] {{")
@@ -97,11 +97,12 @@ def emit():
     L.append("")
     ind = []
     icN = len(ib) // 4
-    for s in range(0, icN, per):
-        cnt = min(per, icN - s)
+    for sb in range(0, len(ib), per * 4):
+        cnt = min(per, (len(ib) - sb) // 4)
         vals = []
         for i in range(cnt):
-            p = ib[s + i * 4] << 24 | ib[s + i * 4 + 1] << 16 | ib[s + i * 4 + 2] << 8 | ib[s + i * 4 + 3]
+            r = ib[sb + i * 4]; g = ib[sb + i * 4 + 1]; b = ib[sb + i * 4 + 2]; a = ib[sb + i * 4 + 3]
+            p = a << 24 | r << 16 | g << 8 | b
             vals.append("0x%08x" % p if p < 0x80000000 else "-0x%08x" % (0x100000000 - p))
         ind.append("            " + ", ".join(vals))
     L.append(f"        public static readonly int[] ICON_RGBA = new int[{ICON_SIZE * ICON_SIZE}] {{")

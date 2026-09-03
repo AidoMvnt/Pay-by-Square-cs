@@ -31,6 +31,7 @@ namespace PayBySquare
             string text = "ahoj";
             string outPath = "qr_ahoj.bmp";
             QrCode.Ecc ecl = QrCode.Ecc.Medium;
+            bool pbsHandled = false;
 
             for (int i = 0; i < args.Length; i++)
             {
@@ -75,6 +76,7 @@ namespace PayBySquare
                         else if (a == "--date"  && j + 1 < args.Length) date  = args[++j];
                         else if (a == "--note"  && j + 1 < args.Length) note  = args[++j];
                         else if (a == "--bic"   && j + 1 < args.Length) bic   = args[++j];
+                        else if (a == "--out"   && j + 1 < args.Length) outPath = args[++j];
                         else if (a == "--qr")    makeQr = true;
                         else if (a == "--tile")  { makeQr = true; makeTile = true; }
                         else if (a == "--tile1") { makeQr = true; makeTile = true; do1bitTile = true; }
@@ -113,24 +115,30 @@ namespace PayBySquare
                                 mod[y, x] = q.GetModule(x, y);
                         if (makeTile)
                         {
-                            // Decorated tile (frame + "PAY by square" caption + icon)
+                            // Decorated tile (frame + "PAY by square" caption + icon).
+                            // --tile   = 24-bit RGB   (default)
+                            // --tile1  = 1-bit        (only this)
+                            // --tilesvg= vector SVG
                             var deco = new QrTileDecorator();
                             if (qrPixel.HasValue) deco.ModuleScale = qrPixel.Value;
                             var (w, h, rgb) = deco.RenderTile(mod);
                             string tileAbs = Path.GetFullPath(outPath);
-                            new Bmp24Saver().Save(w, h, rgb, tileAbs);           // lossless RGB
-                            Console.WriteLine($"tile(24): {w}x{h} -> {tileAbs} ({new FileInfo(tileAbs).Length} B)");
+                            if (!do1bitTile)
+                            {
+                                new Bmp24Saver().Save(w, h, rgb, tileAbs);           // lossless RGB
+                                Console.WriteLine($"tile(24): {w}x{h} -> {tileAbs} ({new FileInfo(tileAbs).Length} B)");
+                            }
                             if (do1bitTile)
                             {
-                                string mono = Path.ChangeExtension(tileAbs, ".1.bmp");
-                                new BmpSaver().Save(w, h, rgb, mono);             // 1-bit (R&G&B > T)
-                                Console.WriteLine($"tile(1):  {w}x{h} -> {mono} ({new FileInfo(mono).Length} B)");
+                                // --tile1: the 1-bit tile IS the requested output -> write it to outPath
+                                new BmpSaver().Save(w, h, rgb, tileAbs);             // 1-bit (R&G&B > T)
+                                Console.WriteLine($"tile(1):  {w}x{h} -> {tileAbs} ({new FileInfo(tileAbs).Length} B)");
                             }
                             if (doSvg)
                             {
-                                string svgPath = Path.ChangeExtension(tileAbs, ".svg");
-                                File.WriteAllText(svgPath, deco.ToSvg(mod));
-                                Console.WriteLine($"tile(svg): {w}x{h} -> {svgPath}");
+                                // --tilesvg: the SVG IS the requested output -> write it to outPath
+                                File.WriteAllText(tileAbs, deco.ToSvg(mod));
+                                Console.WriteLine($"tile(svg): {w}x{h} -> {tileAbs}");
                             }
                         }
                         else
@@ -140,6 +148,7 @@ namespace PayBySquare
                             Console.WriteLine($"qr:       v{q.Version} {q.Size}x{q.Size} mask {q.Mask} -> {outAbs}");
                         }
                     }
+                    pbsHandled = true;   // --pbs owns its own output; skip the "ahoj" text path
                     continue;   // don't exit the arg loop — allow more flags after --pbs
                 }
                 if (args[i] == "--ecl" && i + 1 < args.Length)
@@ -159,20 +168,25 @@ namespace PayBySquare
                 }
             }
 
-            QrCode qr = QrCode.EncodeText(text, ecl);
-            Console.WriteLine($"text:    \"{text}\"");
-            Console.WriteLine($"version: {qr.Version}   size: {qr.Size}x{qr.Size}   ecl: {qr.Ecl}   mask: {qr.Mask}");
+            // Text-based QR path ("--text" / positional / --ecl / --out).
+            // When --pbs already produced its own output, skip this entirely.
+            if (!pbsHandled)
+            {
+                QrCode qr = QrCode.EncodeText(text, ecl);
+                Console.WriteLine($"text:    \"{text}\"");
+                Console.WriteLine($"version: {qr.Version}   size: {qr.Size}x{qr.Size}   ecl: {qr.Ecl}   mask: {qr.Mask}");
 
-            // string -> bool[,]
-            bool[,] modules = new bool[qr.Size, qr.Size];
-            for (int y = 0; y < qr.Size; y++)
-                for (int x = 0; x < qr.Size; x++)
-                    modules[y, x] = qr.GetModule(x, y);
+                // string -> bool[,]
+                bool[,] modules = new bool[qr.Size, qr.Size];
+                for (int y = 0; y < qr.Size; y++)
+                    for (int x = 0; x < qr.Size; x++)
+                        modules[y, x] = qr.GetModule(x, y);
 
-            // bool[,] -> 1-bit BMP
-            new BmpSaver().Save(modules, outPath);
-            string abs = Path.GetFullPath(outPath);
-            Console.WriteLine($"bmp:     {abs} ({new FileInfo(abs).Length} B)");
+                // bool[,] -> 1-bit BMP
+                new BmpSaver().Save(modules, outPath);
+                string abs = Path.GetFullPath(outPath);
+                Console.WriteLine($"bmp:     {abs} ({new FileInfo(abs).Length} B)");
+            }
             return 0;
         }
 
