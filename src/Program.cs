@@ -129,6 +129,7 @@ namespace PayBySquare
                             var deco = new QrTileDecorator();
                             if (qrPixel.HasValue) deco.ModuleScale = qrPixel.Value;
                             if (pageBg != null) deco.Page = (pageBg[0], pageBg[1], pageBg[2]);
+                            if (do1bitTile) deco.Mono = true;   // print path: flat ink, no colored glyphs
                             var (w, h, rgb) = deco.RenderTile(mod);
                             string tileAbs = Path.GetFullPath(outPath);
                             if (!do1bitTile)

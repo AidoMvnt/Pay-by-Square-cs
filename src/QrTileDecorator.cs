@@ -58,6 +58,31 @@ namespace PayBySquare
         /// layout path.</summary>
         public (int R, int G, int B) Page { get; set; } = (0x21, 0x21, 0x21);
 
+        /// <summary>
+        /// When true (1-bit / print path), the wordmark and the brand icon are
+        /// drawn as a single flat INK — black on a light page, white on a dark
+        /// page — instead of their brand colors, so the <c>R&gt;0x80 &amp;
+        /// G&gt;0x80 &amp; B&gt;0x80</c> threshold of <see cref="BmpSaver"/>
+        /// never mis-fires on colored glyphs. Real-color rendering is what
+        /// <c>false</c> (24-bit / SVG) paths use.
+        /// </summary>
+        public bool Mono { get; set; }
+
+        /// <summary>
+        /// Flat ink for <see cref="Mono"/> rendering: white on a dark page,
+        /// black on a light page — chosen so the <see cref="BmpSaver"/>
+        /// threshold reads the glyph pixels against the page the way a
+        /// print engine would (high-contrast either way).
+        /// </summary>
+        private (int r, int g, int b) Ink
+        {
+            get
+            {
+                int lum = (Page.R + Page.G + Page.B) / 3;
+                return lum > 0x80 ? (0, 0, 0) : (255, 255, 255);
+            }
+        }
+
         private const int AA = 4;  // supersampling factor for bitmap blitting
 
         // ================= constructor =================
@@ -249,6 +274,7 @@ namespace PayBySquare
                     // alpha-over: out = premultipliedInk + back * (1 - alpha)
                     int back = buf[ty * W + tx];
                     int br = (back >> 16) & 0xFF, bgr = (back >> 8) & 0xFF, bb = back & 0xFF;
+                    if (Mono) (pr, pg, pb) = Ink;    // print path: flat ink, coverage-blended
                     buf[ty * W + tx] = Pack(
                         Math.Min(255, pr + br * (255 - al) / 255),
                         Math.Min(255, pg + bgr * (255 - al) / 255),
@@ -286,6 +312,7 @@ namespace PayBySquare
                     if (a == 0) continue;
                     int al = a / (AA * AA);          // avg source alpha, 0..255
                     int ir = ar / a, ig = ag / a, ib = ab / a;
+                    if (Mono) (ir, ig, ib) = Ink;   // print path: flat ink
                     int back = buf[ty * W + tx];
                     int br = (back >> 16) & 0xFF, bgr = (back >> 8) & 0xFF, bb = back & 0xFF;
                     buf[ty * W + tx] = Pack(
