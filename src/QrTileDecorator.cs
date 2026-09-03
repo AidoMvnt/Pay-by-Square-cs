@@ -52,6 +52,12 @@ namespace PayBySquare
         public bool ShowCaption { get; set; } = true;
         public bool ShowIcon { get; set; } = true;
 
+        /// <summary>Page background colour (around the card). Dark by
+        /// default — set to <c>(255, 255, 255)</c> (or CLI <c>--bg 255,255,255</c>)
+        /// for a white page. Equivalent to <see cref="Layout.Page"/> on the
+        /// layout path.</summary>
+        public (int R, int G, int B) Page { get; set; } = (0x21, 0x21, 0x21);
+
         private const int AA = 4;  // supersampling factor for bitmap blitting
 
         // ================= constructor =================
@@ -128,7 +134,8 @@ namespace PayBySquare
             int W = g.W, H = g.H;
             var buf = new int[W * H];
 
-            int bg = Pack(BG_R, BG_G, BG_B);
+            var p = _layout?.Page ?? Page;
+            int bg = Pack(p.R, p.G, p.B);
             int card = Pack(CARD_R, CARD_G, CARD_B);
             int borderC = Pack(BORDER_R, BORDER_G, BORDER_B);
             int qrLight = Pack(QR_LIGHT, QR_LIGHT, QR_LIGHT);

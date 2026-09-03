@@ -64,6 +64,7 @@ namespace PayBySquare
                     bool makeQr = false;
                     bool makeTile = false, do1bitTile = false, doSvg = false;
                     int? qrPixel = null;
+                    int[]? pageBg = null;
                     for (int j = i + 1; j < args.Length; j++)
                     {
                         string a = args[j];
@@ -83,6 +84,12 @@ namespace PayBySquare
                         else if (a == "--tilesvg") { makeQr = true; makeTile = true; doSvg = true; }
                         else if (a == "--qrp"   && j + 1 < args.Length) qrPixel = int.Parse(args[++j]);
                         else if (a == "--qrpix" && j + 1 < args.Length) qrPixel = int.Parse(args[++j]);
+                        else if (a == "--bg"    && j + 1 < args.Length)
+                        {
+                            var parts = args[++j].Split(',');
+                            if (parts.Length != 3) throw new ArgumentException("--bg expects R,G,B (0..255)");
+                            pageBg = new int[] { int.Parse(parts[0]), int.Parse(parts[1]), int.Parse(parts[2]) };
+                        }
                     }
                     if (iban == "")   throw new ArgumentException("--pbs requires --iban");
                     if (amount == "") throw new ArgumentException("--pbs requires --amount");
@@ -121,6 +128,7 @@ namespace PayBySquare
                             // --tilesvg= vector SVG
                             var deco = new QrTileDecorator();
                             if (qrPixel.HasValue) deco.ModuleScale = qrPixel.Value;
+                            if (pageBg != null) deco.Page = (pageBg[0], pageBg[1], pageBg[2]);
                             var (w, h, rgb) = deco.RenderTile(mod);
                             string tileAbs = Path.GetFullPath(outPath);
                             if (!do1bitTile)
